@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Decision Models</title>
+
+<!-- Fonts: Archivo (display) + Nunito (body) + IBM Plex Mono (model output / code) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;800;900&family=Nunito:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================
+   CSS CUSTOM PROPERTIES (THEME)
+   Change these to restyle the whole deck
+   =========================================== */
+:root {
+    --stage-bg: #e9e9e6;      /* letterbox colour around the stage */
+    --slide-bg: #ffffff;
+    --ink: #0b0b0b;
+    --red: #ff3300;           /* single accent: "new" / "important" */
+    --green: #0f9d58;         /* only used for the "No escalation" decision */
+    --rule: #ececec;          /* background grid lines */
+    --muted: #8a8a8a;
+
+    --font-display: 'Archivo', sans-serif;
+    --font-body: 'Nunito', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+
+    --pad-x: 160px;           /* left/right slide margin (one grid column) */
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ===========================================
+   FIXED STAGE BASE (viewport-base.css, verbatim)
+   =========================================== */
+/* ===========================================
+   FIXED 16:9 STAGE: MANDATORY BASE STYLES
+   Include this ENTIRE file in every presentation.
+   Slides are authored at 1920×1080 and scaled as a whole.
+   =========================================== */
+
+/* 1. Lock the browser viewport */
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+
+/* 2. Full-window deck viewport */
+.deck-viewport {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+
+/* 3. Fixed 16:9 design canvas.
+   JavaScript sets transform: translate(...) scale(...). */
+.deck-stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    transform-origin: 0 0;
+    background: var(--slide-bg, #fff);
+}
+
+/* 4. Slides stack inside the fixed stage.
+   Content must be laid out at 1920×1080, not reflowed per device. */
+.slide {
+    position: absolute;
+    inset: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background: var(--slide-bg, #fff);
+}
+
+.slide.active,
+.slide.visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 1;
+}
+
+/* 5. Keep media inside authored slide bounds */
+img,
+video,
+canvas,
+svg {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+/* 6. Presentation chrome stays outside the slide design system */
+.deck-controls {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    z-index: 1000;
+}
+
+/* 7. Print one fixed-size slide per page */
+@media print {
+    html,
+    body {
+        width: 1920px;
+        height: auto;
+        overflow: visible;
+        background: #fff;
+    }
+
+    .deck-viewport {
+        position: static;
+        overflow: visible;
+        background: #fff;
+    }
+
+    .deck-stage {
+        position: static;
+        width: auto;
+        height: auto;
+        transform: none !important;
+        background: none;
+    }
+
+    .slide {
+        position: relative;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: 1920px;
+        height: 1080px;
+        break-after: page;
+        page-break-after: always;
+    }
+
+    .slide:last-child {
+        break-after: auto;
+        page-break-after: auto;
+    }
+
+    .deck-controls {
+        display: none !important;
+    }
+}
+
+/* 8. Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+    }
+}
+
+
+/* ===========================================
+   SLIDE SHELL: grid backdrop, kicker, footer
+   =========================================== */
+.slide { font-family: var(--font-body); color: var(--ink); }
+
+/* Swiss grid: faint vertical rules every 160px */
+.slide::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(to right, var(--rule) 1px, transparent 1px);
+    background-size: 160px 100%;
+}
+
+.kicker {
+    position: absolute; left: var(--pad-x); top: 110px;
+    font: 800 22px var(--font-display); letter-spacing: .2em; text-transform: uppercase;
+}
+.kicker b { color: var(--red); font-weight: 800; }
+.kicker .step { color: var(--muted); margin-left: 18px; }
+
+.foot {
+    position: absolute; left: var(--pad-x); right: var(--pad-x); bottom: 70px;
+    border-top: 3px solid var(--ink); padding-top: 18px;
+    display: flex; justify-content: space-between;
+    font: 800 16px var(--font-display); letter-spacing: .2em; text-transform: uppercase;
+}
+
+.red { color: var(--red); }
+
+/* ===========================================
+   REVEAL ANIMATIONS
+   Elements with .reveal animate in when their slide becomes .visible.
+   Use data-d="1..6" for stagger order.
+   =========================================== */
+.reveal { opacity: 0; transform: translateY(36px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
+.slide.visible .reveal { opacity: 1; transform: none; }
+.reveal[data-d="1"] { transition-delay: .08s; }
+.reveal[data-d="2"] { transition-delay: .18s; }
+.reveal[data-d="3"] { transition-delay: .30s; }
+.reveal[data-d="4"] { transition-delay: .42s; }
+.reveal[data-d="5"] { transition-delay: .56s; }
+.reveal[data-d="6"] { transition-delay: .70s; }
+
+/* ===========================================
+   TITLE SLIDE
+   =========================================== */
+.title-xl { position: absolute; left: var(--pad-x); top: 300px; font: 900 196px/.9 var(--font-display); letter-spacing: -.045em; }
+.title-sub { position: absolute; left: 162px; top: 720px; width: 900px; font: 400 38px/1.35 var(--font-body); }
+.circle {
+    position: absolute; right: 220px; top: 220px; width: 420px; height: 420px; border-radius: 50%;
+    background: var(--red); transform: scale(0); transition: transform .9s cubic-bezier(.2,.9,.3,1.2) .2s;
+}
+.slide.visible .circle { transform: scale(1); }
+.hbar { position: absolute; right: var(--pad-x); height: 22px; background: var(--ink); transform-origin: right; transform: scaleX(0); transition: transform 1s var(--ease); }
+.slide.visible .hbar { transform: scaleX(1); }
+.hbar.b1 { top: 720px; width: 640px; transition-delay: .5s; }
+.hbar.b2 { top: 770px; width: 120px; transition-delay: .6s; }
+.hbar.b3 { top: 820px; width: 60px;  transition-delay: .7s; }
+.bar-lbl { position: absolute; right: var(--pad-x); top: 880px; font: 800 18px var(--font-display); letter-spacing: .2em; }
+
+/* ===========================================
+   SECTION DIVIDERS (full-bleed red)
+   =========================================== */
+.slide.section { --slide-bg: var(--red); background: var(--red); color: #fff; }
+.slide.section::before { background-image: linear-gradient(to right, rgba(255,255,255,.14) 1px, transparent 1px); }
+.sec-num { position: absolute; left: 150px; top: 80px; font: 900 420px/1 var(--font-display); letter-spacing: -.06em; }
+.sec-title { position: absolute; left: var(--pad-x); bottom: 200px; font: 900 150px/.92 var(--font-display); letter-spacing: -.04em; }
+.sec-sub { position: absolute; left: 164px; bottom: 120px; font: 600 34px var(--font-body); opacity: .92; }
+.slide.section .foot { border-color: #fff; }
+
+/* ===========================================
+   STATEMENT SLIDES (one big idea)
+   =========================================== */
+.statement { position: absolute; left: var(--pad-x); top: 270px; width: 1100px; font: 800 84px/1.04 var(--font-display); letter-spacing: -.03em; }
+.statement u { text-decoration-thickness: 8px; text-underline-offset: 12px; }
+.statement-note { position: absolute; left: 164px; top: 760px; width: 900px; font: 400 36px/1.4 var(--font-body); }
+
+/* Probability readout used beside statements */
+.readout { position: absolute; left: 1440px; top: 300px; width: 320px; }
+.readout .q { font: 800 20px var(--font-display); letter-spacing: .2em; text-transform: uppercase; margin-bottom: 34px; }
+.opt { margin-bottom: 30px; }
+.opt .row { display: flex; justify-content: space-between; font: 700 26px var(--font-body); margin-bottom: 10px; }
+.opt .track { height: 16px; background: #f0f0f0; }
+.opt .fill { height: 100%; background: var(--ink); transform-origin: left; transform: scaleX(0); transition: transform 1.1s var(--ease) .5s; }
+.opt.win .fill { background: var(--red); }
+.opt.win .row { color: var(--red); }
+.slide.visible .opt .fill { transform: scaleX(var(--v)); }
+
+.mega { position: absolute; left: 150px; top: 290px; font: 900 260px/.9 var(--font-display); letter-spacing: -.05em; }
+
+/* Speed slide */
+.speed-num { position: absolute; left: 150px; top: 300px; font: 900 330px/.85 var(--font-display); letter-spacing: -.055em; }
+.speed-num small { font-size: 120px; letter-spacing: -.02em; }
+.speed-cap { position: absolute; left: 164px; top: 640px; font: 600 40px var(--font-body); }
+.speed-dot { position: absolute; right: var(--pad-x); top: 640px; width: 200px; height: 200px; border-radius: 50%; background: var(--red); transform: scale(0); transition: transform .8s cubic-bezier(.2,.9,.3,1.2) .3s; }
+.slide.visible .speed-dot { transform: scale(1); }
+
+/* Quote slide */
+.quote { position: absolute; left: var(--pad-x); top: 400px; width: 1500px; font: 800 72px/1.14 var(--font-display); letter-spacing: -.025em; }
+.quote::before { content: "“"; position: absolute; left: -10px; top: -210px; font: 900 260px/1 var(--font-display); color: var(--red); }
+.cite { position: absolute; left: 164px; top: 820px; font: 800 22px var(--font-display); letter-spacing: .2em; text-transform: uppercase; }
+
+/* Cost table */
+.h2 { position: absolute; left: var(--pad-x); top: 160px; font: 900 120px/.95 var(--font-display); letter-spacing: -.045em; }
+.cost { position: absolute; left: var(--pad-x); width: 1600px; top: 400px; border-collapse: collapse; }
+.cost th { text-align: left; font: 800 20px var(--font-display); letter-spacing: .2em; text-transform: uppercase; padding: 0 0 22px; border-bottom: 3px solid var(--ink); }
+.cost th.n, .cost td.n { text-align: right; }
+.cost td { font: 600 40px var(--font-body); padding: 30px 0; border-bottom: 1px solid #d8d8d8; }
+.cost td.n { font: 800 56px var(--font-display); letter-spacing: -.02em; }
+.cost td .sub { display: block; font: 400 24px var(--font-body); color: var(--muted); margin-top: 4px; }
+.cost tr.jev td { color: var(--red); border-bottom: 3px solid var(--red); }
+.cost tr.jev td:first-child { font-weight: 800; }
+.cost .free { font-family: var(--font-display); font-weight: 900; }
+.cost-note { position: absolute; left: 164px; bottom: 140px; font: 400 26px var(--font-body); color: var(--muted); }
+
+/* ===========================================
+   FLOW DIAGRAMS
+   Diagrams are defined as data in the <script> (DIAGRAMS).
+   Each diagram slide renders steps 1..N; the newest step is red.
+   Coordinates are in 1920×1080 stage pixels.
+   =========================================== */
+.dg-head { position: absolute; left: var(--pad-x); top: 160px; width: 1600px; font: 900 84px/1 var(--font-display); letter-spacing: -.04em; }
+.dg-cap { position: absolute; left: 164px; top: 262px; font: 400 32px var(--font-body); color: #333; }
+.dg { position: absolute; inset: 0; }
+.dg svg { position: absolute; inset: 0; width: 1920px; height: 1080px; max-width: none; max-height: none; overflow: visible; }
+
+.edge { fill: none; stroke: var(--ink); stroke-width: 4; }
+.edge.new { stroke: var(--red); }
+.shape { fill: #fff; stroke: var(--ink); stroke-width: 4; }
+.shape.new { stroke: var(--red); }
+
+.node {
+    position: absolute; display: flex; align-items: center; justify-content: center; text-align: center;
+    background: #fff; border: 4px solid var(--ink);
+    font: 800 36px/1.05 var(--font-display); letter-spacing: -.01em; padding: 0 16px;
+}
+.node.pill { border-radius: 999px; background: var(--ink); color: #fff; font-weight: 900; font-size: 44px; }
+.node.new { border-color: var(--red); }
+.node.pill.new { background: var(--red); border-color: var(--red); }
+.node.diamond { background: none; border: none; }
+
+.elabel {
+    position: absolute; transform: translate(-50%, -50%); text-align: center; white-space: nowrap;
+    background: #fff; padding: 4px 14px; font: 600 26px/1.25 var(--font-body);
+}
+.elabel b { font: 900 34px var(--font-display); color: var(--red); }
+.elabel .opts { font-size: 22px; color: #555; }
+
+/* Static-diagram highlight + compact sizing (architecture diagrams) */
+.edge.hl, .shape.hl { stroke: var(--red); }
+.node.hl { border-color: var(--red); }
+.dg.compact .node { font-size: 28px; padding: 0 12px; }
+.dg.compact .node.pill { font-size: 40px; }
+.dg-note { position: absolute; font: 800 26px/1.3 var(--font-display); color: var(--red); }
+.dg-fine { position: absolute; left: 164px; bottom: 120px; font: 400 22px var(--font-body); color: var(--muted); }
+.chip { position: absolute; border: 3px solid var(--ink); padding: 14px 22px; font: 500 26px var(--font-mono); }
+.chip span { color: var(--muted); }
+/* Centered key-point slide */
+.center-stmt { position: absolute; left: 260px; right: 260px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+.center-stmt .big { font: 900 92px/1.02 var(--font-display); letter-spacing: -.04em; }
+.center-stmt .small { margin-top: 48px; max-width: 1150px; font: 400 40px/1.4 var(--font-body); }
+.demo-next { position: absolute; left: 0; right: 0; bottom: 150px; text-align: center; font: 800 24px var(--font-display); letter-spacing: .2em; text-transform: uppercase; color: var(--red); }
+.center-stmt .rule { width: 120px; height: 10px; background: var(--red); margin-bottom: 56px; }
+
+
+/* Token strip (slide: autoregressive LLM) */
+.toks { position: absolute; left: var(--pad-x); top: 585px; width: 540px; }
+.toks-lbl { font: 800 20px var(--font-display); letter-spacing: .2em; text-transform: uppercase; white-space: nowrap; margin-bottom: 18px; }
+.toks-row { display: flex; gap: 8px; }
+.tok { display: flex; flex-direction: column; align-items: center; gap: 6px; opacity: 0; }
+.tok code { display: block; border: 3px solid var(--ink); padding: 10px 12px; font: 500 28px var(--font-mono); white-space: pre; }
+.tok i { font: 800 15px var(--font-display); font-style: normal; letter-spacing: .1em; color: var(--muted); }
+.tok.next code { border: 3px dashed var(--red); color: var(--red); }
+.tok.next i { color: var(--red); }
+.slide.visible .tok { animation: tokIn .35s var(--ease) forwards; animation-delay: calc(.6s + var(--i) * .35s); }
+.slide.visible .tok.next code { animation: tokPulse 1.1s ease-in-out 2.8s infinite; }
+@keyframes tokIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes tokPulse { 50% { opacity: .35; } }
+.toks-cap { margin-top: 18px; font: 400 24px/1.35 var(--font-body); color: #444; }
+
+/* Parallel-sampling callout (slide: decision model) */
+.par { position: absolute; left: var(--pad-x); top: 600px; width: 540px; border-left: 6px solid var(--red); padding-left: 28px; }
+.par-lbl { font: 800 20px var(--font-display); letter-spacing: .2em; text-transform: uppercase; color: var(--red); margin-bottom: 14px; }
+.par p { font: 400 27px/1.35 var(--font-body); margin-bottom: 8px; }
+.par b { font-weight: 700; }
+
+/* Diagram entrance: only the newest step animates */
+.dg .new { opacity: 0; }
+.slide.visible .dg .node.new,
+.slide.visible .dg .elabel.new { animation: dgIn .6s var(--ease) forwards; }
+.slide.visible .dg .shape.new { animation: dgFade .4s ease forwards; }
+.slide.visible .dg .edge.new { animation: dgDraw .7s var(--ease) forwards; }
+.dg .node.new { animation-delay: .1s !important; }
+.dg .edge.new { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.slide.visible .dg .edge.new { animation-delay: .35s; }
+.slide.visible .dg .elabel.new { animation-delay: .75s; }
+@keyframes dgIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes dgFade { to { opacity: 1; } }
+@keyframes dgDraw { 0% { opacity: 1; stroke-dashoffset: 1; } 100% { opacity: 1; stroke-dashoffset: 0; } }
+/* edge labels keep their centring transform while animating */
+.slide.visible .dg .elabel.new { animation-name: dgLabel; }
+@keyframes dgLabel { from { opacity: 0; transform: translate(-50%, -30%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+
+/* ===========================================
+   INTERACTIVE THRESHOLD SLIDE
+   Left: the ticket + Jev's readout. Right: sliders + live decision.
+   =========================================== */
+.ticket { position: absolute; left: var(--pad-x); top: 330px; width: 740px; border-left: 6px solid var(--ink); padding-left: 34px; }
+.t-lbl, .jo-lbl, .d-lbl, .ctl-name {
+    font: 800 20px var(--font-display); letter-spacing: .2em; text-transform: uppercase;
+}
+.t-body { margin-top: 18px; font: 400 32px/1.45 var(--font-body); }
+
+.jev-out { position: absolute; left: var(--pad-x); top: 680px; width: 520px; border: 3px solid var(--ink); padding: 22px 28px; font-family: var(--font-mono); }
+.jo-lbl { color: var(--muted); font-size: 16px; }
+.jo-q { font: 500 28px var(--font-mono); margin-top: 10px; }
+.jo-row { display: flex; justify-content: space-between; font: 500 28px var(--font-mono); padding-left: 32px; margin-top: 4px; }
+
+.ctl { position: absolute; left: 1040px; width: 720px; }
+.ctl-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
+.ctl-val { font: 900 64px/1 var(--font-display); letter-spacing: -.03em; }
+
+/* Range input: thick ink track, square thumb */
+.rng { -webkit-appearance: none; appearance: none; width: 100%; height: 48px; background: transparent; cursor: pointer; }
+.rng::-webkit-slider-runnable-track { height: 8px; background: linear-gradient(to right, var(--ink) var(--fill, 50%), #e2e2e2 var(--fill, 50%)); }
+.rng::-moz-range-track { height: 8px; background: #e2e2e2; }
+.rng::-moz-range-progress { height: 8px; background: var(--ink); }
+.rng::-webkit-slider-thumb { -webkit-appearance: none; width: 40px; height: 40px; margin-top: -16px; background: var(--red); border: 0; }
+.rng::-moz-range-thumb { width: 40px; height: 40px; background: var(--red); border: 0; border-radius: 0; }
+.rng:focus-visible { outline: 3px dashed var(--red); outline-offset: 6px; }
+
+.decision { position: absolute; left: 1040px; top: 700px; width: 720px; border-top: 3px solid var(--ink); padding-top: 22px; }
+.d-word { font: 900 104px/1.05 var(--font-display); letter-spacing: -.04em; margin-top: 8px; transition: color .25s; }
+.d-word.esc { color: var(--red); }
+.d-word.ok  { color: var(--green); }
+.d-code { display: block; margin-top: 12px; font: 500 24px var(--font-mono); color: #444; }
+
+/* ===========================================
+   DECK CHROME (outside the stage)
+   =========================================== */
+.progress { position: fixed; left: 0; bottom: 0; height: 4px; background: var(--red); z-index: 1000; transition: width .4s var(--ease); }
+.counter { position: fixed; right: 18px; bottom: 12px; z-index: 1000; font: 800 12px var(--font-display); letter-spacing: .15em; color: #777; }
+
+/* ===========================================
+   INLINE EDITING (press E, or hover top-left corner)
+   =========================================== */
+.edit-hotzone { position: fixed; top: 0; left: 0; width: 80px; height: 80px; z-index: 10000; cursor: pointer; }
+.edit-toggle {
+    position: fixed; top: 16px; left: 16px; z-index: 10001; width: 44px; height: 44px; border: 0; border-radius: 50%;
+    background: var(--ink); color: #fff; font-size: 20px; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .3s;
+}
+.edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+.edit-toggle.active { background: var(--red); }
+body.editing [contenteditable="true"] { outline: 2px dashed rgba(255,51,0,.5); outline-offset: 6px; cursor: text; }
+</style>
+</head>
+<body>
+
+<div class="deck-viewport">
+<main class="deck-stage" id="deckStage">
+
+<!-- ===================== 1. TITLE ===================== -->
+<section class="slide active">
+    <div class="kicker reveal" data-d="1"><b>00</b> &nbsp;/&nbsp; Introduction</div>
+    <div class="circle"></div>
+    <h1 class="title-xl reveal" data-d="1">Decision<br>models.</h1>
+    <p class="title-sub reveal" data-d="3">One forward pass. A probability for every option.</p>
+    <div class="hbar b1"></div><div class="hbar b2"></div><div class="hbar b3"></div>
+    <div class="bar-lbl reveal" data-d="6">0.95 &nbsp;·&nbsp; 0.04 &nbsp;·&nbsp; 0.01</div>
+    <div class="foot"><span>What they are &amp; how to use them</span><span>Jev</span></div>
+</section>
+
+<!-- ===================== 2. SECTION 01 ===================== -->
+<section class="slide section">
+    <div class="sec-num reveal" data-d="1">01</div>
+    <h2 class="sec-title reveal" data-d="2">What is a<br>decision model?</h2>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 3. DEFINITION ===================== -->
+<section class="slide">
+    <div class="kicker reveal"><b>01</b> &nbsp;/&nbsp; What is a decision model</div>
+    <p class="statement reveal" data-d="1">Returns <span class="red">probabilities</span> over a <u>fixed set of options</u>.</p>
+    <p class="statement-note reveal" data-d="3">All in a single forward pass.</p>
+    <div class="readout reveal" data-d="2">
+        <div class="q">Which team?</div>
+        <div class="opt win"><div class="row"><span>Billing</span><span>0.82</span></div><div class="track"><div class="fill" style="--v:.82"></div></div></div>
+        <div class="opt"><div class="row"><span>Support</span><span>0.11</span></div><div class="track"><div class="fill" style="--v:.11"></div></div></div>
+        <div class="opt"><div class="row"><span>Engineering</span><span>0.05</span></div><div class="track"><div class="fill" style="--v:.05"></div></div></div>
+        <div class="opt"><div class="row"><span>Sales</span><span>0.02</span></div><div class="track"><div class="fill" style="--v:.02"></div></div></div>
+    </div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 4. CLASSIFYING ===================== -->
+<section class="slide">
+    <div class="kicker reveal"><b>01</b> &nbsp;/&nbsp; Otherwise known as</div>
+    <div class="mega reveal" data-d="1">Classifying<span class="red">.</span></div>
+    <p class="statement-note reveal" data-d="3" style="top:620px;width:1500px">Ask a question with fixed answers. Get a probability for each one.</p>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 5. FAST ===================== -->
+<section class="slide">
+    <div class="kicker reveal"><b>01</b> &nbsp;/&nbsp; Fast</div>
+    <div class="speed-dot"></div>
+    <div class="speed-num reveal" data-d="1">70–500<small>ms</small></div>
+    <p class="speed-cap reveal" data-d="3">Jev's end-to-end response time.</p>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 6. QUOTE ===================== -->
+<section class="slide">
+    <div class="kicker reveal"><b>01</b> &nbsp;/&nbsp; Fast</div>
+    <blockquote class="quote reveal" data-d="1">This can range from <span class="red">40x–200x faster</span> for the same levels of frontier intelligence for System One shaped queries.</blockquote>
+    <div class="cite reveal" data-d="3">— Jev</div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 7. CHEAP ===================== -->
+<section class="slide">
+    <div class="kicker reveal"><b>01</b> &nbsp;/&nbsp; Cheap</div>
+    <h2 class="h2 reveal" data-d="1">And cheap<span class="red">.</span></h2>
+    <table class="cost reveal" data-d="2">
+        <thead><tr><th>Model</th><th class="n">Input / 1M</th><th class="n">Output / 1M</th></tr></thead>
+        <tbody>
+            <tr><td>GPT-6 Luna<span class="sub">LLM</span></td><td class="n">$0.10</td><td class="n">$0.50</td></tr>
+            <tr><td>OpenAI decision model<span class="sub">Uses GPT-6 Luna</span></td><td class="n">$0.10</td><td class="n free">Free</td></tr>
+            <tr class="jev"><td>Jev<span class="sub" style="color:inherit;opacity:.8">Decision model</span></td><td class="n">$0.042</td><td class="n free">Free</td></tr>
+        </tbody>
+    </table>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 8. SECTION 02 ===================== -->
+<section class="slide section">
+    <div class="sec-num reveal" data-d="1">02</div>
+    <h2 class="sec-title reveal" data-d="2">How do<br>I use it?</h2>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 9–11. DIAGRAM 1: DATA → ACTION ===================== -->
+<section class="slide">
+    <div class="kicker"><b>02</b> &nbsp;/&nbsp; From data to action<span class="step">1 / 3</span></div>
+    <h2 class="dg-head reveal">Give it state and a question.</h2>
+    <div class="dg" data-diagram="flow" data-step="1"></div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+<section class="slide">
+    <div class="kicker"><b>02</b> &nbsp;/&nbsp; From data to action<span class="step">2 / 3</span></div>
+    <h2 class="dg-head reveal">Get a probability per option.</h2>
+    <div class="dg" data-diagram="flow" data-step="2"></div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+<section class="slide">
+    <div class="kicker"><b>02</b> &nbsp;/&nbsp; From data to action<span class="step">3 / 3</span></div>
+    <h2 class="dg-head reveal">Your code branches on it.</h2>
+    <div class="dg" data-diagram="flow" data-step="3"></div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 12–15. DIAGRAM 2: QUESTION TYPES ===================== -->
+<section class="slide">
+    <div class="kicker"><b>02</b> &nbsp;/&nbsp; Question types<span class="step">1 / 4</span></div>
+    <h2 class="dg-head reveal">Three kinds of question.</h2>
+    <div class="dg" data-diagram="types" data-step="1"></div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+<section class="slide">
+    <div class="kicker"><b>02</b> &nbsp;/&nbsp; Question types<span class="step">2 / 4</span></div>
+    <h2 class="dg-head reveal">“Is this a refund request?”</h2>
+    <div class="dg" data-diagram="types" data-step="2"></div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+<section class="slide">
+    <div class="kicker"><b>02</b> &nbsp;/&nbsp; Question types<span class="step">3 / 4</span></div>
+    <h2 class="dg-head reveal">“Which team should handle this?”</h2>
+    <div class="dg" data-diagram="types" data-step="3"></div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+<section class="slide">
+    <div class="kicker"><b>02</b> &nbsp;/&nbsp; Question types<span class="step">4 / 4</span></div>
+    <h2 class="dg-head reveal">“How frustrated is this customer?”</h2>
+    <div class="dg" data-diagram="types" data-step="4"></div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 16–18. DIAGRAM 3: ROUTING ===================== -->
+<section class="slide">
+    <div class="kicker"><b>02</b> &nbsp;/&nbsp; Routing a message<span class="step">1 / 3</span></div>
+    <h2 class="dg-head reveal">One fast call.</h2>
+    <div class="dg" data-diagram="route" data-step="1"></div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+<section class="slide">
+    <div class="kicker"><b>02</b> &nbsp;/&nbsp; Routing a message<span class="step">2 / 3</span></div>
+    <h2 class="dg-head reveal">Send it to the right handler.</h2>
+    <div class="dg" data-diagram="route" data-step="2"></div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+<section class="slide">
+    <div class="kicker"><b>02</b> &nbsp;/&nbsp; Routing a message<span class="step">3 / 3</span></div>
+    <h2 class="dg-head reveal">Escalate or block the rest.</h2>
+    <div class="dg" data-diagram="route" data-step="3"></div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 19. DEMO ===================== -->
+<section class="slide section">
+    <div class="sec-num reveal" data-d="1">03</div>
+    <h2 class="sec-title reveal" data-d="2">Demo.</h2>
+    <p class="sec-sub reveal" data-d="3">An LLM vs. Jev, side by side.</p>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 20. SECTION 04 (back from demo) ===================== -->
+<section class="slide section">
+    <div class="sec-num reveal" data-d="1">04</div>
+    <h2 class="sec-title reveal" data-d="2">Confidence is<br>a feature.</h2>
+    <p class="sec-sub reveal" data-d="3">A probability, not just an answer.</p>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 21. INTERACTIVE THRESHOLD ===================== -->
+<!-- Drag the sliders live: the decision is plain deterministic code over Jev's probability. -->
+<section class="slide" id="thresholdSlide">
+    <div class="kicker"><b>04</b> &nbsp;/&nbsp; Confidence + threshold</div>
+    <h2 class="dg-head reveal">Your code draws the line.</h2>
+
+    <div class="ticket reveal" data-d="1">
+        <div class="t-lbl">Support ticket</div>
+        <p class="t-body">No rush on this, but I noticed our CSV exports have been missing roughly 10% of rows since Tuesday. Everything else works fine. We only caught it because last week's totals didn't reconcile with finance.</p>
+    </div>
+
+    <div class="jev-out reveal" data-d="2">
+        <div class="jo-lbl">Jev — provider-native</div>
+        <div class="jo-q">escalate</div>
+        <div class="jo-row"><span>yes</span><span id="joVal">37.0%</span></div>
+    </div>
+
+    <div class="ctl reveal" data-d="2" style="top:330px">
+        <div class="ctl-row"><span class="ctl-name">Noul · P(yes)</span><span class="ctl-val" id="pVal">37.0%</span></div>
+        <input type="range" class="rng" id="pRange" min="0" max="100" step="0.5" value="37" aria-label="Probability of yes">
+    </div>
+    <div class="ctl reveal" data-d="3" style="top:510px">
+        <div class="ctl-row"><span class="ctl-name">Threshold</span><span class="ctl-val" id="tVal">50%</span></div>
+        <input type="range" class="rng" id="tRange" min="0" max="100" step="1" value="50" aria-label="Escalation threshold">
+    </div>
+
+    <div class="decision reveal" data-d="4">
+        <div class="d-lbl">Decision</div>
+        <div class="d-word" id="dWord">No escalation</div>
+        <code class="d-code" id="dCode">p_yes 0.370 &gt; threshold 0.50 → false</code>
+    </div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 22. SECTION 05 ===================== -->
+<section class="slide section">
+    <div class="sec-num reveal" data-d="1">05</div>
+    <h2 class="sec-title reveal" data-d="2">Why is it<br>so fast?</h2>
+    <p class="sec-sub reveal" data-d="3">Token generation vs. a single decision readout.</p>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 23. AUTOREGRESSIVE LLM ===================== -->
+<section class="slide">
+    <div class="kicker"><b>05</b> &nbsp;/&nbsp; Autoregressive LLM</div>
+    <h2 class="dg-head reveal">An LLM loops, one token at a time.</h2>
+    <div class="dg reveal" data-d="1" data-diagram="llm" data-static></div>
+    <p class="dg-note reveal" data-d="3" style="left:740px;top:730px">↺ The transformer runs again<br>for every output token.</p>
+    <!-- Structured output caught mid-generation: one chip per trip around the loop (illustrative tokenization) -->
+    <div class="toks reveal" data-d="2">
+        <div class="toks-lbl">JSON output, mid-generation</div>
+        <div class="toks-row">
+            <span class="tok" style="--i:0"><code>{"</code><i>1</i></span>
+            <span class="tok" style="--i:1"><code>escal</code><i>2</i></span>
+            <span class="tok" style="--i:2"><code>ate</code><i>3</i></span>
+            <span class="tok" style="--i:3"><code>":</code><i>4</i></span>
+            <span class="tok" style="--i:4"><code>␣"</code><i>5</i></span>
+            <span class="tok next" style="--i:5"><code>?</code><i>6</i></span>
+        </div>
+        <p class="toks-cap">One token per loop. The JSON isn't valid until the last one lands.</p>
+    </div>
+    <p class="dg-fine reveal" data-d="4">Simplified: a key/value cache usually avoids recomputing earlier tokens.</p>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 24. NON-AUTOREGRESSIVE DECISION MODEL ===================== -->
+<section class="slide">
+    <div class="kicker"><b>05</b> &nbsp;/&nbsp; Decision model</div>
+    <h2 class="dg-head reveal">A decision model doesn't loop.</h2>
+    <div class="dg reveal" data-d="1" data-diagram="dm" data-static></div>
+    <p class="dg-note reveal" data-d="3" style="left:740px;top:600px">→ One pass. Every option<br>scored directly.</p>
+    <div class="chip reveal" data-d="4" style="left:1320px;top:740px">escalate &nbsp;<span>yes</span> 0.37</div>
+    <div class="par reveal" data-d="5">
+        <div class="par-lbl">Parallel sampling</div>
+        <p>Up to <b>255</b> choices per question.</p>
+        <p><b>Several questions</b> in one forward pass.</p>
+    </div>
+    <p class="dg-fine reveal" data-d="4">Illustrative architecture, not Jev's disclosed internals.</p>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 25. KEY POINT (centered) ===================== -->
+<section class="slide">
+    <div class="kicker"><b>06</b> &nbsp;/&nbsp; Know the boundary</div>
+    <div class="center-stmt">
+        <div class="rule reveal"></div>
+        <p class="big reveal" data-d="1">Decision models are <span class="red">not</span> replacements for knowledge retrieval.</p>
+        <p class="small reveal" data-d="3">They are specialized models for making decisions about information, often information another system has to acquire.</p>
+    </div>
+    <div class="demo-next reveal" data-d="5">Demos &nbsp;→&nbsp; Jevmeter + Exa</div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+
+<!-- ===================== 26. KEY POINT (centered) ===================== -->
+<section class="slide">
+    <div class="kicker"><b>06</b> &nbsp;/&nbsp; Know the boundary</div>
+    <div class="center-stmt">
+        <div class="rule reveal"></div>
+        <p class="big reveal" data-d="1">Decision models <span class="red">never</span> output generated text.</p>
+    </div>
+    <div class="foot"><span>Decision models</span><span class="pg"></span></div>
+</section>
+</main>
+</div>
+
+<!-- Deck chrome -->
+<div class="progress" id="progress"></div>
+<div class="counter" id="counter"></div>
+<div class="edit-hotzone"></div>
+<button class="edit-toggle" id="editToggle" title="Edit mode (E)" aria-label="Toggle edit mode">✎</button>
+
+<script>
+/* ===========================================
+   DIAGRAM DEFINITIONS
+   nodes: id → { x, y, w, h, t (label), s (step it appears), shape }
+   Static diagrams (data-static on the .dg) skip the step build; `hl: true` marks red.
+   edges: { f (from), t (to), l (label HTML), s (step), dy/dx (label offset), hl,
+            fs/ts (from/to side r|l|t|b → straight or single-elbow routing),
+            lt (label position 0–1 along edge), elbow (x of a vertical trunk → right-angle routing) }
+   Edges run from the right-middle of `f` to the left-middle of `t`.
+   =========================================== */
+const DIAGRAMS = {
+    /* 1. From data and questions to action */
+    flow: {
+        nodes: {
+            data:      { x: 120,  y: 420, w: 280, h: 130, t: 'Your data', s: 1 },
+            questions: { x: 120,  y: 720, w: 280, h: 130, t: 'Questions', s: 1 },
+            jev:       { x: 640,  y: 570, w: 240, h: 130, t: 'Jev', s: 1, shape: 'pill' },
+            code:      { x: 1160, y: 570, w: 260, h: 130, t: 'Your code', s: 2 },
+            action:    { x: 1600, y: 570, w: 200, h: 130, t: 'Action', s: 3 }
+        },
+        edges: [
+            { f: 'data',      t: 'jev',    l: 'the state',     s: 1 },
+            { f: 'questions', t: 'jev',    l: 'fixed options', s: 1 },
+            { f: 'jev',       t: 'code',   l: 'a probability<br>per option', s: 2, dy: -70 },
+            { f: 'code',      t: 'action', l: 'branches<br>on it', s: 3, dy: -70 }
+        ]
+    },
+    /* 4. Autoregressive LLM: token-by-token loop (static) */
+    llm: {
+        cls: 'compact',
+        nodes: {
+            a: { x: 160,  y: 380, w: 230, h: 110, t: 'Input text' },
+            b: { x: 450,  y: 380, w: 230, h: 110, t: 'Tokenize + embed' },
+            c: { x: 740,  y: 380, w: 230, h: 110, t: 'Transformer layers', hl: true },
+            d: { x: 1030, y: 380, w: 230, h: 110, t: 'Next-token probabilities' },
+            e: { x: 1320, y: 380, w: 230, h: 110, t: 'Select token' },
+            f: { x: 1335, y: 565, w: 200, h: 150, t: 'End token?', shape: 'diamond', hl: true },
+            g: { x: 740,  y: 585, w: 230, h: 110, t: 'Append token to context', hl: true },
+            h: { x: 1320, y: 800, w: 230, h: 110, t: 'Detokenize output' }
+        },
+        edges: [
+            { f: 'a', t: 'b' }, { f: 'b', t: 'c' }, { f: 'c', t: 'd' }, { f: 'd', t: 'e' },
+            { f: 'e', t: 'f', fs: 'b', ts: 't' },
+            { f: 'f', t: 'g', fs: 'l', ts: 'r', l: 'No', dy: -30, hl: true },
+            { f: 'g', t: 'c', fs: 't', ts: 'b', hl: true },
+            { f: 'f', t: 'h', fs: 'b', ts: 't', l: 'Yes', dx: 50 }
+        ]
+    },
+    /* 5. Non-autoregressive decision model: same front half, no loop (static) */
+    dm: {
+        cls: 'compact',
+        nodes: {
+            a: { x: 160,  y: 380, w: 230, h: 110, t: 'State + question + options' },
+            b: { x: 450,  y: 380, w: 230, h: 110, t: 'Tokenize + embed' },
+            c: { x: 740,  y: 380, w: 230, h: 110, t: 'Transformer layers', hl: true },
+            d: { x: 1030, y: 380, w: 230, h: 110, t: 'Decision scores / logits' },
+            e: { x: 1320, y: 380, w: 230, h: 110, t: 'Probabilities over options' },
+            f: { x: 1320, y: 585, w: 230, h: 110, t: 'Typed decision output', hl: true }
+        },
+        edges: [
+            { f: 'a', t: 'b' }, { f: 'b', t: 'c' }, { f: 'c', t: 'd' }, { f: 'd', t: 'e' },
+            { f: 'e', t: 'f', fs: 'b', ts: 't', hl: true }
+        ]
+    },
+    /* 2. Question types and results */
+    types: {
+        nodes: {
+            jev:    { x: 120,  y: 570, w: 220, h: 130, t: 'Jev', s: 1, shape: 'pill' },
+            noul:   { x: 640,  y: 390, w: 240, h: 120, t: 'Noul',   s: 1 },
+            choice: { x: 640,  y: 575, w: 240, h: 120, t: 'Choice', s: 1 },
+            score:  { x: 640,  y: 760, w: 240, h: 120, t: 'Score',  s: 1 },
+            refund: { x: 1440, y: 390, w: 320, h: 120, t: 'Refund',      s: 2 },
+            billing:{ x: 1440, y: 575, w: 320, h: 120, t: 'Billing',     s: 3 },
+            frus:   { x: 1440, y: 760, w: 320, h: 120, t: 'Frustration', s: 4 }
+        },
+        edges: [
+            { f: 'jev', t: 'noul',   l: 'yes or no',       s: 1 },
+            { f: 'jev', t: 'choice', l: 'pick one',        s: 1 },
+            { f: 'jev', t: 'score',  l: 'rate on a scale', s: 1 },
+            { f: 'noul',   t: 'refund',  l: 'refund request? &nbsp;<b>0.95</b>', s: 2 },
+            { f: 'choice', t: 'billing', l: 'which team?<br><span class="opts">billing, support, engineering, sales</span>', s: 3 },
+            { f: 'score',  t: 'frus',    l: 'how frustrated? &nbsp;<b>1.4</b> of 2', s: 4 }
+        ]
+    },
+    /* 3. Routing a message to the right action */
+    route: {
+        nodes: {
+            msg:    { x: 120,  y: 580, w: 240, h: 130, t: 'Message', s: 1 },
+            jev:    { x: 560,  y: 580, w: 200, h: 130, t: 'Jev', s: 1, shape: 'pill' },
+            code:   { x: 920,  y: 535, w: 220, h: 220, t: 'Code', s: 1, shape: 'diamond' },
+            lookup: { x: 1540, y: 370, w: 240, h: 100, t: 'Lookup', s: 2 },
+            llm:    { x: 1540, y: 520, w: 240, h: 100, t: 'LLM',    s: 2 },
+            human:  { x: 1540, y: 670, w: 240, h: 100, t: 'Human',  s: 3 },
+            block:  { x: 1540, y: 820, w: 240, h: 100, t: 'Block',  s: 3 }
+        },
+        edges: [
+            { f: 'msg',  t: 'jev',    l: 'one fast call', s: 1, dy: -56 },
+            { f: 'jev',  t: 'code',   l: 'answers', s: 1, dy: -56 },
+            { f: 'code', t: 'lookup', l: 'order status',     s: 2, elbow: 1260 },
+            { f: 'code', t: 'llm',    l: 'product question', s: 2, elbow: 1260 },
+            { f: 'code', t: 'human',  l: 'angry or unclear', s: 3, elbow: 1260 },
+            { f: 'code', t: 'block',  l: 'jailbreak',        s: 3, elbow: 1260 }
+        ]
+    }
+};
+
+/* ===========================================
+   DIAGRAM RENDERER
+   Builds SVG edges + HTML nodes/labels for one slide.
+   Skips containers that already have content (e.g. a saved, edited copy).
+   =========================================== */
+function renderDiagram(el, idx) {
+    if (el.children.length) return;
+    const d = DIAGRAMS[el.dataset.diagram];
+    const step = +el.dataset.step || 1;
+    const isStatic = 'static' in el.dataset;   // static: no step build, red = e.hl / n.hl
+    if (d.cls) el.classList.add(d.cls);
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 1920 1080');
+    // Arrowheads: one ink, one red (ids must be unique per slide)
+    svg.innerHTML = ['ink', 'red'].map(c =>
+        `<marker id="ah-${c}-${idx}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+           <path d="M0,0 L10,5 L0,10 z" fill="var(--${c})"/></marker>`).join('');
+    svg.innerHTML = `<defs>${svg.innerHTML}</defs>`;
+
+    const cls = (s = 1, hl) => isStatic ? (hl ? ' hl' : '') : (s === step ? ' new' : '');
+    const isRed = (s = 1, hl) => isStatic ? !!hl : s === step;
+    // Anchor point on a node side: r / l / t / b
+    const anchor = (n, side) => ({
+        r: [n.x + n.w, n.y + n.h / 2], l: [n.x, n.y + n.h / 2],
+        t: [n.x + n.w / 2, n.y],       b: [n.x + n.w / 2, n.y + n.h]
+    })[side];
+    const html = [];
+
+    // Edges + labels
+    d.edges.filter(e => (e.s ?? 1) <= step).forEach(e => {
+        const a = d.nodes[e.f], b = d.nodes[e.t];
+        // Side-anchored edges (fs/ts): straight line if aligned, else one elbow
+        if (e.fs) {
+            const [x1, y1] = anchor(a, e.fs), [x2, y2] = anchor(b, e.ts);
+            const p = document.createElementNS(NS, 'path');
+            p.setAttribute('d', (x1 === x2 || y1 === y2) ? `M${x1},${y1} L${x2},${y2}`
+                : 'tb'.includes(e.fs) ? `M${x1},${y1} V${y2} H${x2}` : `M${x1},${y1} H${x2} V${y2}`);
+            p.setAttribute('pathLength', '1');
+            p.setAttribute('class', 'edge' + cls(e.s, e.hl));
+            p.setAttribute('marker-end', `url(#ah-${isRed(e.s, e.hl) ? 'red' : 'ink'}-${idx})`);
+            svg.appendChild(p);
+            if (e.l) html.push(`<div class="elabel${cls(e.s, e.hl)}" style="left:${(x1 + x2) / 2 + (e.dx || 0)}px;top:${(y1 + y2) / 2 + (e.dy || 0)}px">${e.l}</div>`);
+            return;
+        }
+        const x1 = a.x + a.w, y1 = a.y + a.h / 2;
+        const x2 = b.x - 2, y2 = b.y + b.h / 2;
+        const dx = (x2 - x1) * 0.5;
+        const p = document.createElementNS(NS, 'path');
+        // elbow edges: right to a shared vertical trunk at x = e.elbow, then across to the target
+        p.setAttribute('d', e.elbow
+            ? `M${x1},${y1} H${e.elbow} V${y2} H${x2}`
+            : `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`);
+        p.setAttribute('pathLength', '1');
+        p.setAttribute('class', 'edge' + cls(e.s, e.hl));
+        p.setAttribute('marker-end', `url(#ah-${isRed(e.s, e.hl) ? 'red' : 'ink'}-${idx})`);
+        svg.appendChild(p);
+        if (e.l) {
+            // label sits at fraction `lt` along the curve (default: midpoint)
+            const t = e.lt ?? 0.5, u = 1 - t;
+            if (e.elbow) {
+                html.push(`<div class="elabel${cls(e.s, e.hl)}" style="left:${(e.elbow + x2) / 2}px;top:${y2 - 30}px">${e.l}</div>`);
+                return;
+            }
+            const mx = u*u*u*x1 + 3*u*u*t*(x1 + dx) + 3*u*t*t*(x2 - dx) + t*t*t*x2;
+            const my = u*u*u*y1 + 3*u*u*t*y1 + 3*u*t*t*y2 + t*t*t*y2 + (e.dy || 0);
+            html.push(`<div class="elabel${cls(e.s, e.hl)}" style="left:${mx}px;top:${my}px">${e.l}</div>`);
+        }
+    });
+
+    // Nodes (diamonds get an SVG polygon behind a transparent label box)
+    Object.values(d.nodes).filter(n => (n.s ?? 1) <= step).forEach(n => {
+        if (n.shape === 'diamond') {
+            const poly = document.createElementNS(NS, 'polygon');
+            const cx = n.x + n.w / 2, cy = n.y + n.h / 2;
+            poly.setAttribute('points', `${cx},${n.y} ${n.x + n.w},${cy} ${cx},${n.y + n.h} ${n.x},${cy}`);
+            poly.setAttribute('class', 'shape' + cls(n.s, n.hl));
+            svg.appendChild(poly);
+        }
+        const shape = n.shape ? ' ' + n.shape : '';
+        html.push(`<div class="node${shape}${cls(n.s, n.hl)}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px">${n.t}</div>`);
+    });
+
+    el.appendChild(svg);
+    el.insertAdjacentHTML('beforeend', html.join(''));
+}
+document.querySelectorAll('.dg').forEach(renderDiagram);
+
+/* ===========================================
+   THRESHOLD DEMO
+   decision = p_yes > threshold  (strictly greater → escalate)
+   =========================================== */
+(() => {
+    const p = document.getElementById('pRange'), t = document.getElementById('tRange');
+    const word = document.getElementById('dWord'), code = document.getElementById('dCode');
+    const update = () => {
+        const pv = +p.value / 100, tv = +t.value / 100, esc = pv > tv;
+        document.getElementById('pVal').textContent = (pv * 100).toFixed(1) + '%';
+        document.getElementById('joVal').textContent = (pv * 100).toFixed(1) + '%';
+        document.getElementById('tVal').textContent = Math.round(tv * 100) + '%';
+        [p, t].forEach(r => r.style.setProperty('--fill', r.value + '%'));
+        word.textContent = esc ? 'Escalate' : 'No escalation';
+        word.className = 'd-word ' + (esc ? 'esc' : 'ok');
+        code.textContent = `p_yes ${pv.toFixed(3)} > threshold ${tv.toFixed(2)} → ${esc}`;
+    };
+    [p, t].forEach(r => r.addEventListener('input', update));
+    update();
+})();
+
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   Keyboard (arrows / space / PageUp / PageDown / Home / End),
+   touch swipe, mouse wheel, fixed-stage scaling.
+   =========================================== */
+class SlidePresentation {
+    constructor() {
+        this.slides = [...document.querySelectorAll('.slide')];
+        this.stage = document.getElementById('deckStage');
+        this.progress = document.getElementById('progress');
+        this.counter = document.getElementById('counter');
+        this.current = 0;
+        this.slides.forEach((s, i) => s.querySelectorAll('.pg').forEach(p => p.textContent = String(i + 1).padStart(2, '0')));
+        this.setupStageScale();
+        this.setupKeyboardNav();
+        this.setupTouchNav();
+        this.setupWheelNav();
+        const fromHash = parseInt(location.hash.slice(1), 10);
+        this.show(Number.isFinite(fromHash) ? fromHash - 1 : 0);
+    }
+    setupStageScale() {
+        const scale = () => {
+            const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+            this.stage.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px, ${(innerHeight - 1080 * k) / 2}px) scale(${k})`;
+        };
+        scale();
+        addEventListener('resize', scale);
+    }
+    setupKeyboardNav() {
+        document.addEventListener('keydown', e => {
+            if (document.body.classList.contains('editing') || e.target.matches('input')) return;
+            if (['ArrowRight', 'ArrowDown', ' ', 'PageDown', 'Enter'].includes(e.key)) { e.preventDefault(); this.show(this.current + 1); }
+            else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) { e.preventDefault(); this.show(this.current - 1); }
+            else if (e.key === 'Home') this.show(0);
+            else if (e.key === 'End') this.show(this.slides.length - 1);
+        });
+    }
+    setupTouchNav() {
+        let x0 = null;
+        addEventListener('touchstart', e => { x0 = e.target.matches('input') ? null : e.touches[0].clientX; }, { passive: true });
+        addEventListener('touchend', e => {
+            if (x0 === null) return;
+            const dx = e.changedTouches[0].clientX - x0;
+            if (Math.abs(dx) > 40) this.show(this.current + (dx < 0 ? 1 : -1));
+            x0 = null;
+        });
+    }
+    setupWheelNav() {
+        let lock = false;
+        addEventListener('wheel', e => {
+            if (lock || Math.abs(e.deltaY) < 20 || document.body.classList.contains('editing')) return;
+            lock = true; setTimeout(() => lock = false, 700);
+            this.show(this.current + (e.deltaY > 0 ? 1 : -1));
+        }, { passive: true });
+    }
+    show(i) {
+        this.current = Math.max(0, Math.min(i, this.slides.length - 1));
+        this.slides.forEach((s, n) => {
+            const on = n === this.current;
+            s.classList.toggle('active', on);
+            s.classList.toggle('visible', on);
+        });
+        this.progress.style.width = `${(this.current + 1) / this.slides.length * 100}%`;
+        this.counter.textContent = `${this.current + 1} / ${this.slides.length}`;
+        history.replaceState(null, '', '#' + (this.current + 1));
+    }
+}
+const deck = new SlidePresentation();
+
+/* ===========================================
+   INLINE EDITOR
+   E (or the top-left hotzone) toggles edit mode.
+   Ctrl/Cmd+S downloads an edited copy of the deck.
+   =========================================== */
+const editor = {
+    isActive: false,
+    selector: '.kicker, h1, h2, p, blockquote, .cite, .foot span:first-child, td, th, .node, .elabel, .bar-lbl, .q, .row span',
+    toggleEditMode() {
+        this.isActive = !this.isActive;
+        document.body.classList.toggle('editing', this.isActive);
+        document.getElementById('editToggle').classList.toggle('active', this.isActive);
+        document.querySelectorAll(this.selector).forEach(el => el.setAttribute('contenteditable', this.isActive));
+    },
+    download() {
+        document.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+        const blob = new Blob(['<!DOCTYPE html>\n' + document.documentElement.outerHTML], { type: 'text/html' });
+        const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'decision-models.html' });
+        a.click();
+        if (this.isActive) document.querySelectorAll(this.selector).forEach(el => el.setAttribute('contenteditable', true));
+    }
+};
+
+const editToggle = document.getElementById('editToggle');
+const hotzone = document.querySelector('.edit-hotzone');
+let hideTimeout = null;
+editToggle.addEventListener('click', () => editor.toggleEditMode());
+hotzone.addEventListener('click', () => editor.toggleEditMode());
+[hotzone, editToggle].forEach(el => {
+    el.addEventListener('mouseenter', () => { clearTimeout(hideTimeout); editToggle.classList.add('show'); });
+    el.addEventListener('mouseleave', () => {
+        hideTimeout = setTimeout(() => { if (!editor.isActive) editToggle.classList.remove('show'); }, 400);
+    });
+});
+document.addEventListener('keydown', e => {
+    if ((e.key === 'e' || e.key === 'E') && !e.target.isContentEditable) { e.preventDefault(); editor.toggleEditMode(); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); editor.download(); }
+});
+</script>
+</body>
+</html>

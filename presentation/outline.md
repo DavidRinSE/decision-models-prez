@@ -1,0 +1,11 @@
+- What is a decision model and how do I use it
+    - Decision models return probabilities over a fixed set of options in a single forward pass (otherwise referred to as classifying)
+    - Fast and cheap. Jev says end to end response time is 70-500ms “This can range from 40x-200x faster for the same levels of frontier intelligence for System One shaped queries.”GPT 6 Luna is $0.10/1M input and $0.50/1M outputJEV $0.042/1M input and output free(OpenAI Decision model uses GPT-6 Luna, same input price and free output)
+- Mermaid diagrams
+- Demo comparing LLM to Jev
+- Benefits of confidence and probabilities
+    - Sliders with model confidence and confidence threshold that show a decision changing
+    - Noul escalate from calm demo
+- Why are decision models so fast? Auto-regressive token generation vs Decision models
+- Decision models are not replacements for knowledge retrieval. They are specialized models for making decisions about information—often information another system has to acquire.
+ - Jevmeter, Exa

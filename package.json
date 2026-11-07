@@ -1,0 +1,25 @@
+{
+  "name": "decision-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Live demo: an autoregressive LLM vs. a purpose-built decision model on the same support-ticket decision.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "demo:llm": "tsx src/llm.ts",
+    "demo:jev": "tsx src/jev.ts",
+    "demo:compare": "tsx src/compare.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.0",
+    "openai": "^7.52.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}
